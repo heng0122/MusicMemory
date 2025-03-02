@@ -1,2 +1,2 @@
 # MusicMemory
-Code used for statistical analyses and data visualizations for the paper "The interplay of music perceptual abilities and experiences with episodic musical memory".
+Code for data analyses and visualizations for the paper titled "The interplay of music perceptual abilities and experiences with episodic musical memory".
