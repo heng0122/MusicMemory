@@ -1,0 +1,300 @@
+' This script contains code for data analyses and visualizations of the paper "The interplay of music perceptual abilities and experiences with episodic musical memory".
+
+df consists of 61 obs. of 32 variables
+
+'
+
+library(dplyr)
+library(correlation) # for correlations
+library(ggplot2)
+library(ggthemes) # use Theme_classic() for this paper
+library(haven)
+library(lme4)
+library(tidyverse) # tidyverse automatically loads ggplot2, dplyr, readr
+library(forcats)
+library(lm.beta) # for standardized coefficients
+library(sandwich) # to obtain SE for standardized coefficients
+library(lmtest)
+library(car) # check multicollinearity
+
+# 1. open data ----
+filepath = "insert path to data"
+
+df <- read.csv(filepath) 
+str(df)
+summary(df)
+
+# 2. clean df - check that variables are of the correct type ----
+# # Variables only needed for descriptives: Ethnicity, CCA, Selftaught
+df <- df %>%
+  mutate(ParticipantID = as.factor(ParticipantID),
+         Gender = recode(Gender, "M" = 1, "F" = 0), 
+         IMIP = as.numeric(IMIP),
+         )
+
+# 3.1. Participant characteristics ----
+df_participant <- df %>%
+  select(ParticipantID, YearsofFORMALmusicaltraining, IMT, IMIP, IML)
+
+# descriptives
+participant_stats <- df_participant %>%
+  summarise(across(c(YearsofFORMALmusicaltraining, IMT, IMIP, IML), 
+                   list(mean = ~mean(. , na.rm = TRUE), 
+                        median = ~median(. , na.rm = TRUE), 
+                        sd = ~sd(. , na.rm = TRUE))))
+print(participant_stats)
+
+# spearman correlations: Years of formal musical training, IMIP, IML
+df_participant %>%
+  select(-ParticipantID, -IMT) %>%
+  correlation(method = "spearman")
+
+# 3.2. Mini-PROMS results ----
+# subset miniPROMS data
+df_miniPROMS <- df %>%
+  select(ParticipantID, MELODY, TUNING, ACCENT, TEMPO, TOTALPROMS) 
+
+# check for missing data
+df_miniPROMS %>%
+  filter(if_any(everything(), is.na)) %>%
+  print()
+
+# Table S2: miniPROMS Descriptives ----
+miniPROMS_summary_stats <- df_miniPROMS %>%
+  summarise(across(c(MELODY, TUNING, ACCENT, TEMPO, TOTALPROMS), 
+                   list(mean = ~mean(. , na.rm = TRUE), 
+                        median = ~median(. , na.rm = TRUE), 
+                        sd = ~sd(. , na.rm = TRUE))))
+print(miniPROMS_summary_stats)
+
+# # Individual Wilcoxon tests
+# wilcoxon signed-rank test (TUNING vs MELODY)
+result <- wilcox.test(df_miniPROMS$TUNING, df_miniPROMS$MELODY, paired=TRUE)
+z <- qnorm(result$p.value/2)
+
+# wilcoxon signed-rank test (TUNING vs TEMPO)
+result <- wilcox.test(df_miniPROMS$TUNING, df_miniPROMS$TEMPO, paired=TRUE)
+z <- qnorm(result$p.value/2)
+
+# wilcoxon signed-rank test (TUNING vs ACCENT)
+result <- wilcox.test(df_miniPROMS$TUNING, df_miniPROMS$ACCENT, paired=TRUE)
+z <- qnorm(result$p.value/2)
+
+# check between MELODY, TEMPO, ACCENT
+wilcox.test(df_miniPROMS$TEMPO, df_miniPROMS$MELODY, paired=TRUE)
+
+# spearman correlations
+df_miniPROMS %>%
+  select(-TOTALPROMS, -ParticipantID) %>%
+  correlation(method = "spearman")
+
+# Fig. 2a: Descriptives of MiniPROMS ----
+# generate boxplot + dots
+miniPROMS2plot %>%
+ggplot(aes(x = fct_relevel(test, "MELODY", "ACCENT", "TEMPO", "TUNING"), y = score)) +
+  geom_boxplot(outlier.shape = NA, fill = "white", alpha = 0.7) + # Boxplot
+  geom_jitter(aes(color = test), width = 0.2, height = 0, size = 2) + # Individual points
+  scale_color_brewer(palette = "Set1") + # Color palette for points
+  theme_classic() + 
+  labs(
+    x = "Mini-PROMS subtests",
+    y = "Mean Score"
+  ) +
+  theme(
+    legend.position = "none", # Remove legend
+    text = element_text(size = 12) # Adjust font size
+  ) + 
+  scale_y_continuous(
+    limits = c(0, 10),  # Set y-axis range
+    breaks = seq(0, 10, by = 2)  # Major ticks at every integer
+  ) 
+
+# 3.3. Episodic Musical Memory Task results ----
+# subset Memory data
+df_Memory <- df %>%
+  select(ParticipantID, NEWhitrate, OLDhitrates, OLDtoNEWFA, SIMILARhitrate, SIMILARtoNEW, SIMILARtoOLD, REC, LDI)
+
+# check for missing data
+df_Memory %>%
+  filter(if_any(everything(), is.na)) %>%
+  print()
+
+# Table S3: Memory descriptives ----
+Memory_summary_stats <- df_Memory %>%
+  summarise(across(c(NEWhitrate, OLDhitrates, SIMILARhitrate, LDI, REC), 
+                   list(mean = ~mean(. , na.rm = TRUE), 
+                        median = ~median(. , na.rm = TRUE), 
+                        sd = ~sd(. , na.rm = TRUE))))
+print(Memory_summary_stats)
+
+# wilcoxon signed-rank test (SIMILAR VS OLD)
+result <- wilcox.test(df_Memory$SIMILARhitrate, df_Memory$OLDhitrates, paired=TRUE)
+z <- qnorm(result$p.value/2)
+
+# wilcoxon signed-rank test (SIMILAR VS NEW)
+result <- wilcox.test(df_Memory$SIMILARhitrate, df_Memory$NEWhitrate, paired=TRUE)
+z <- qnorm(result$p.value/2)
+
+# wilcoxon signed-rank test (LDI VS REC)
+result <- wilcox.test(df_Memory$LDI, df_Memory$REC, paired=TRUE)
+z <- qnorm(result$p.value/2)
+
+# Spearman correlations
+df_Memory %>%
+  select(-OLDtoNEWFA, -SIMILARtoNEW, -SIMILARtoOLD) %>%
+  correlation(method = "spearman")
+
+# Fig. 2b: Descriptives of Episodic Musical Memory Task ----
+# df for plot
+Memory2plot <- df_Memory %>%
+  select(-OLDtoNEWFA, -SIMILARtoNEW, -SIMILARtoOLD) %>%
+  pivot_longer(
+    -ParticipantID,
+    names_to = "test",
+    values_to = "score",
+    values_drop_na = FALSE
+  ) %>%
+  mutate(test = as.factor(test)) 
+
+# generate boxplot + dots
+Memory2plot %>%
+  ggplot(aes(x = fct_relevel(test, "NEWhitrate", "OLDhitrates", "SIMILARhitrate", "REC", "LDI"), y = score)) +
+  geom_boxplot(outlier.shape = NA, fill = "white", alpha = 0.7) + # Boxplot
+  geom_jitter(aes(color = test), width = 0.2, height = 0, size = 2) + # Individual points
+  scale_color_brewer(palette = "Set2") + # Color palette for points
+  theme_classic() + 
+  labs(x = "Episodic Musical Memory Task",
+    y = "Mean score"
+  ) +
+  theme(
+    legend.position = "none", # Remove legend
+    text = element_text(size = 12) # Adjust font size
+  ) + 
+  scale_x_discrete(labels = c("New", "Old", "Similar", "REC", "LDI")) +
+  scale_y_continuous(
+    limits = c(round(min(Memory2plot$score),1), max(Memory2plot$score)),  # Set y-axis range
+    breaks = seq(round(min(Memory2plot$score),1), max(Memory2plot$score), by = 0.2))  # Major ticks at every integer
+
+# 3.4. Regressions: PROMS & REC/LDI ----
+# 1. REC and mini-proms total
+# model <- lm(REC ~ TOTALPROMS, data = df)
+model <- lm(REC ~ TOTALPROMS + Age + Gender, data = df)
+
+# 2. LDI and mini-proms total
+# model <- lm(LDI ~ TOTALPROMS, data = df)
+model <- lm(LDI ~ TOTALPROMS + Age + Gender, data = df)
+
+# 3. REC and proms subtests
+# model <- lm(REC ~ ACCENT + MELODY + TEMPO + TUNING, data = df)
+model <- lm(REC ~ ACCENT + MELODY + TEMPO + TUNING + Age + Gender, data = df)
+
+# 4. LDI and proms subtests (then run standardized coeff)
+# model <- lm(LDI ~ ACCENT + MELODY + TEMPO + TUNING, data = df)
+model <- lm(LDI ~ ACCENT + MELODY + TEMPO + TUNING + Age + Gender, data = df)
+
+# 3.5. Moderation regressions ----
+# # Musical experiences and music perception skills
+# Fit the model, moderation as IML
+# model <- lm(TOTALPROMS ~ YearsofFORMALmusicaltraining * IML, data = df)
+model <- lm(TOTALPROMS ~ YearsofFORMALmusicaltraining * IML + Age + Gender, data = df)
+
+# Fit the model, moderation as IMIP
+# model <- lm(TOTALPROMS ~ YearsofFORMALmusicaltraining * IMIP, data = df)
+model <- lm(TOTALPROMS ~ YearsofFORMALmusicaltraining * IMIP + Age + Gender, data = df)
+
+# IML, IMIP, Years of formal music training separately
+model <- lm(TOTALPROMS ~ IML + Age + Gender, data = df)
+
+model <- lm(TOTALPROMS ~ IMIP + Age + Gender, data = df)
+
+model <- lm(TOTALPROMS ~ YearsofFORMALmusicaltraining + Age + Gender, data = df)
+
+# Check significance of predictors and interaction
+anova(model)
+
+# Display summary of model
+summary(model)
+
+# Obtain standardized coefficients
+lm.beta(model, complete.standardization = TRUE)
+
+# Obtain confidence interval for unstandardized coefficient slopes
+confint(model, level = .95)
+
+# Generate heterosecdasity consistent SE
+vcm <- vcovHC(model, type = "HC3")
+coeftest(model, vcov. = vcm)
+
+# Fig. 3 ----
+# # a. Mini PROMS (Total) & REC score 
+df %>%
+  ggplot(aes(x = TOTALPROMS, y = REC)) + 
+  geom_jitter(width = 0.1) + geom_smooth(method = "lm", se = TRUE) +
+  theme_classic() +
+  labs(x = "Total PROMS score",
+       y = "mean REC score") +
+  scale_y_continuous(
+    limits = c(round(min(df$REC),1), max(df$REC)),  # Set y-axis range
+    breaks = seq(round(min(df$REC),1), max(df$REC), by = 0.2))  # Major ticks at every integer
+
+# # b. Mini PROMS (Total) & LDI score
+df %>%
+  ggplot(aes(x = TOTALPROMS, y = LDI)) + 
+  geom_jitter(width = 0.1) + geom_smooth(method = "lm", se = TRUE) +
+  theme_classic() +
+  labs(x = "Total PROMS score",
+       y = "mean LDI score") +
+  scale_y_continuous(
+    limits = c(round(min(df$LDI),1), max(df$LDI)),  # Set y-axis range
+    breaks = seq(round(min(df$LDI),1), max(df$LDI), by = 0.2))  # Major ticks at every integer
+
+# # c. subtests & REC score
+REC2plot <- df %>%
+  select(ParticipantID, REC, MELODY, TUNING, ACCENT, TEMPO) %>%
+  pivot_longer(
+    cols = c(MELODY, TUNING, ACCENT, TEMPO),
+    names_to = "subtest",
+    values_to = "score") %>%
+  mutate(subtest = as.factor(subtest))
+
+REC2plot %>%
+  ggplot(aes(x = score, y = REC, color = subtest)) +
+  geom_jitter(width = 0.1, alpha = 0.5) +
+  geom_smooth(aes(color = subtest), method = "lm", se = FALSE) +
+  theme_classic() +
+  labs(
+    x = "Subtest score",
+    y = "mean REC score"
+  ) +
+  theme(
+    legend.title = element_blank(),
+    legend.position = "bottom",
+    legend.justification = "center",
+    legend.box = "horizontal"
+  )
+
+# # d. subtests & LDI score
+LDI2plot <- df %>%
+  select(ParticipantID, LDI, MELODY, TUNING, ACCENT, TEMPO) %>%
+  pivot_longer(
+    cols = c(MELODY, TUNING, ACCENT, TEMPO),
+    names_to = "subtest",
+    values_to = "score") %>%
+  mutate(subtest = as.factor(subtest))
+
+LDI2plot %>%
+  ggplot(aes(x = score, y = LDI, color = subtest, size = subtest)) +
+  geom_jitter(width = 0.1, alpha = 0.5) +
+  geom_smooth(aes(color = subtest), method = "lm", se = FALSE) +
+  scale_size_manual(values = c(1, 2, 2, 1)) + 
+  theme_classic() +
+  labs(
+    x = "Subtest score",
+    y = "mean LDI score"
+  ) +
+  theme(
+    legend.title = element_blank(),
+    legend.position = "bottom",
+    legend.justification = "center",
+    legend.box = "horizontal"
+  )
